@@ -1,0 +1,479 @@
+
+# coding: utf-8
+
+# In[1036]:
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import datetime as DT
+import io
+import statsmodels.api as sm
+import imblearn
+from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import train_test_split
+import seaborn as sb
+
+
+# In[1037]:
+
+
+dataid = pd.read_csv('BASE_ID.txt', delimiter= "\t")
+
+
+# In[1038]:
+
+
+dataid['FECHA_NACIMIENTO'] = pd.to_datetime(dataid['FECHA_NACIMIENTO'], format="%Y%m%d", errors='coerce')
+#dataid['FECHA_NACIMIENTO'] == dataid['FECHA_NACIMIENTO'].apply('{:06}'.format)
+now = pd.Timestamp(DT.datetime.now())
+dataid['FECHA_NACIMIENTO'] = pd.to_datetime(dataid['FECHA_NACIMIENTO'], format='%Y%m%d')    # 1
+dataid['FECHA_NACIMIENTO'] = dataid['FECHA_NACIMIENTO'].where(dataid['FECHA_NACIMIENTO'] < now, dataid['FECHA_NACIMIENTO'] -  np.timedelta64(100, 'Y'))   # 2
+dataid['Edad'] = (now - dataid['FECHA_NACIMIENTO']).astype('<m8[Y]')    # 3
+#Rangos hasta 17-29-39-49-59-69-80-110 millones
+bins = [3, 18, 30, 40, 50, 60, 70, 80, 102]
+labels = ['17','29', '39', '49', '59', '69', '80', '110']
+dataid['Rango_edad'] = pd.cut(dataid['Edad'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1039]:
+
+
+datamov = pd.read_csv('BASE_MOVIMIENTOS.txt', delimiter= "\s{2,}", engine='python')
+datamov
+
+
+# In[1040]:
+
+
+dataid['SEXO']=np.where(dataid['SEXO'] =='Hombre', 'HOMBRE', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='M', 'HOMBRE', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='Masc.', 'HOMBRE', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='masculino', 'HOMBRE', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='varón', 'HOMBRE', dataid['SEXO'])
+
+
+# In[1041]:
+
+
+dataid['SEXO']=np.where(dataid['SEXO'] =='mujer', 'MUJER', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='femenino', 'MUJER', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='Mujer', 'MUJER', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='F', 'MUJER', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='MUJER', 'MUJER', dataid['SEXO'])
+dataid['SEXO']=np.where(dataid['SEXO'] =='FEMENINO', 'MUJER', dataid['SEXO'])
+
+
+# In[1042]:
+
+
+dataid['SITUACION_LABORAL']=np.where(dataid['SITUACION_LABORAL'] =='otros', 'OTROS', dataid['SITUACION_LABORAL'])
+dataid['SITUACION_LABORAL']=np.where(dataid['SITUACION_LABORAL'] =='Contrato fijo', 'CONTRATO FIJO', dataid['SITUACION_LABORAL'])
+dataid['SITUACION_LABORAL']=np.where(dataid['SITUACION_LABORAL'] =='temporal     ', 'CONTRATO TEMPORAL', dataid['SITUACION_LABORAL'])
+dataid['SITUACION_LABORAL']=np.where(dataid['SITUACION_LABORAL'] ==' desconocido   ', 'SIN CLASIFICAR', dataid['SITUACION_LABORAL'])
+dataid['SITUACION_LABORAL']=np.where(dataid['SITUACION_LABORAL'] =='contrato autonomo.', 'CONTRATO AUTONOMO', dataid['SITUACION_LABORAL'])
+dataid['SITUACION_LABORAL']=np.where(dataid['SITUACION_LABORAL'] =='CONTRATO AUNTONOMO', 'CONTRATO AUTONOMO', dataid['SITUACION_LABORAL'])
+
+
+# In[1043]:
+
+
+dataid['fuga']=np.where(dataid['fuga'] ==np.nan, '0', dataid['fuga'])
+dataid['fuga']=np.where(dataid['fuga'] =="nan", '0', dataid['fuga'])
+dataid['fuga']=np.where(dataid['fuga'] =="1.0", '1', dataid['fuga'])
+
+
+# In[1044]:
+
+
+#dataid['fuga'].value_counts()
+
+
+# In[1045]:
+
+
+#Tener en cuenta
+pd.crosstab(dataid.SITUACION_LABORAL,dataid.fuga).plot(kind='bar')
+plt.title('Fugados por situación laboral')
+plt.xlabel('Tipo de trabajo')
+plt.ylabel('Fugados')
+plt.savefig('Fugados por trabajo')
+
+
+# In[1046]:
+
+
+#No tiene mucha importancia
+table=pd.crosstab(dataid.ESTADO_CIVIL,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Estado civil vs fugados')
+plt.xlabel('Estado civil')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por estado civil')
+
+
+# In[1047]:
+
+
+#No da información importante
+table=pd.crosstab(dataid.SEXO,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Sexo vs fugados')
+plt.xlabel('Sexo')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por sexo')
+
+
+# In[1048]:
+
+
+#La mayoría de gente está entre los 25 y lo 70 por ahí.
+dataid.Edad.hist()
+plt.title('Histograma de las edades')
+plt.xlabel('Edad')
+plt.ylabel('Frecuencia')
+plt.savefig('hist_age')
+
+
+# In[1049]:
+
+
+datamov['SALDO_AHORROS'].min()
+
+
+# In[1050]:
+
+
+datamov['SALDO_AHORROS'].max()
+
+
+# In[1051]:
+
+
+pd.crosstab(dataid.Rango_edad,dataid.fuga).plot(kind='bar')
+plt.title('Fugados por rango edad')
+plt.xlabel('Rango edad')
+plt.ylabel('Fugados')
+plt.savefig('Fugados por edad')
+
+
+# In[1052]:
+
+
+table=pd.crosstab(dataid.Rango_edad,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Edad vs fugados')
+plt.xlabel('Edad')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por rango ')
+
+
+# In[1053]:
+
+
+datamov[datamov['ID']==48]['INDICADOR_MORA']
+
+
+# In[1054]:
+
+
+datamov['SALDO_PASIVO'] = [float(x.replace(',', '.')) for x in datamov['SALDO_PASIVO']]
+datamov['SALDO_ACTIVO'] = [float(x.replace(',', '.')) for x in datamov['SALDO_ACTIVO']]
+dataid['CLIENTE_CC'] = [float(x.replace(',', '.')) for x in dataid['CLIENTE_CC']]
+
+
+# In[1055]:
+
+
+prom_pas=[0]*2500
+for i in range(0, 2500):
+    prom_pas[i] = sum(datamov[datamov['ID'] == i+1]['SALDO_PASIVO'])/len(datamov[datamov['ID'] == i+1]['SALDO_PASIVO'])
+
+
+# In[1056]:
+
+
+dataid['Prom_pas'] = prom_pas
+
+
+# In[1057]:
+
+
+prom_ac=[0]*2500
+for i in range(0, 2500):
+    prom_ac[i] = sum(datamov[datamov['ID'] == i+1]['SALDO_ACTIVO'])/len(datamov[datamov['ID'] == i+1]['SALDO_ACTIVO'])
+
+
+# In[1058]:
+
+
+dataid['Prom_ac'] = prom_ac
+
+
+# In[1059]:
+
+
+moroso=[0]*2500
+for i in range(0, 2500):
+    if sum(datamov[datamov['ID'] == i+1]['INDICADOR_MORA']) != 0:
+        moroso[i]=1
+    else:
+        moroso[i] =0
+    
+
+
+# In[1060]:
+
+
+dataid['Moroso'] = moroso
+
+
+# In[1061]:
+
+
+#Todo moroso es fugado.
+table=pd.crosstab(dataid.Moroso,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Moroso vs fugados')
+plt.xlabel('Moroso')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por morosos ')
+
+
+# In[1062]:
+
+
+#dataid['Prom_ac'].max()
+bins = [0, 2000000, 4000000, 6000000, 8000000, 12000000]
+labels = ['2','4', '6', '8', '12']
+dataid['Rango_pas'] = pd.cut(dataid['Prom_pas'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1063]:
+
+
+bins = [0, 4000000, 8000000, 12000000, 16000000, 24000000]
+labels = ['4','8', '12', '16', '24']
+dataid['Rango_ac'] = pd.cut(dataid['Prom_ac'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1064]:
+
+
+dataid
+
+
+# In[1065]:
+
+
+#Importante
+table=pd.crosstab(dataid.Rango_pas,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Pasivos vs fugados')
+plt.xlabel('Pasivos')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por pasivos ')
+
+
+# In[1066]:
+
+
+#Importante
+table=pd.crosstab(dataid.Rango_ac,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Activos vs fugados')
+plt.xlabel('Activos')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por Activos ')
+
+
+# In[1067]:
+
+
+prom_comp1=[0]*2500
+for i in range(0, 2500):
+    prom_comp1[i] = sum(datamov[datamov['ID'] == i+1]['MONTO_COMPRAS1'])/len(datamov[datamov['ID'] == i+1]['MONTO_COMPRAS1'])
+
+
+# In[1068]:
+
+
+prom_caj1=[0]*2500
+for i in range(0, 2500):
+    prom_caj1[i] = sum(datamov[datamov['ID'] == i+1]['MONTO_CAJERO1'])/len(datamov[datamov['ID'] == i+1]['MONTO_CAJERO1'])
+
+
+# In[1069]:
+
+
+prom_comp2=[0]*2500
+for i in range(0, 2500):
+    prom_comp2[i] = sum(datamov[datamov['ID'] == i+1]['MONTO_COMPRAS2'])/len(datamov[datamov['ID'] == i+1]['MONTO_COMPRAS2'])
+
+
+# In[1070]:
+
+
+prom_caj2=[0]*2500
+for i in range(0, 2500):
+    prom_caj2[i] = sum(datamov[datamov['ID'] == i+1]['MONTO_CAJERO2'])/len(datamov[datamov['ID'] == i+1]['MONTO_CAJERO2'])
+
+
+# In[1071]:
+
+
+prom_nom=[0]*2500
+for i in range(0, 2500):
+    prom_nom[i] = sum(datamov[datamov['ID'] == i+1]['MONTO_ABONOS_NOMINA'])/len(datamov[datamov['ID'] == i+1]['MONTO_ABONOS_NOMINA'])
+
+
+# In[1072]:
+
+
+dataid['Prom_comp1'] = prom_comp1
+dataid['Prom_comp2'] = prom_comp2
+dataid['Prom_caj1'] = prom_caj1
+dataid['Prom_caj2'] = prom_caj2
+dataid['Prom_nom'] = prom_nom
+
+
+# In[1073]:
+
+
+bins = [0, 1000000, 2000000, 3000000, 4000000, 5000000]
+labels = ['1','2', '3', '4', '5']
+dataid['Rango_comp1'] = pd.cut(dataid['Prom_comp1'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1074]:
+
+
+bins = [0, 1000000, 2000000, 3000000, 4000000, 5000000]
+labels = ['1','2', '3', '4', '5']
+dataid['Rango_caj2'] = pd.cut(dataid['Prom_caj2'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1075]:
+
+
+bins = [0, 1000000, 2000000, 3000000, 4000000]
+labels = ['1','2', '3', '4']
+dataid['Rango_comp2'] = pd.cut(dataid['Prom_comp2'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1076]:
+
+
+bins = [0, 500000, 1000000, 1500000, 2000000]
+labels = ['0.5','1', '1.5', '2']
+dataid['Rango_caj1'] = pd.cut(dataid['Prom_caj1'], bins=bins, labels=labels, include_lowest=True)
+
+
+# In[1077]:
+
+
+#Importante
+table=pd.crosstab(dataid.Rango_comp1,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Compras créd vs fugados')
+plt.xlabel('Compras crédito')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por compras créd ')
+
+
+# In[1078]:
+
+
+table=pd.crosstab(dataid.Rango_comp2,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Compras deb vs fugados')
+plt.xlabel('Compras débito')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por compras deb ')
+
+
+# In[1079]:
+
+
+table=pd.crosstab(dataid.Rango_caj1,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Cajero créd vs fugados')
+plt.xlabel('Cajero crédito')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por Cajero créd ')
+
+
+# In[1080]:
+
+
+table=pd.crosstab(dataid.Rango_caj2,dataid.fuga)
+table.div(table.sum(1).astype(float), axis=0).plot(kind='bar', stacked=True)
+plt.title('Cajero deb vs fugados')
+plt.xlabel('Cajero débito')
+plt.ylabel('Proporción fugados')
+plt.savefig('Fugados por cajero débito')
+
+
+# In[1081]:
+
+
+sb.boxplot(x='fuga', y='Edad', data=dataid, palette='hls')
+
+
+# In[1082]:
+
+
+dataid
+
+
+# In[1083]:
+
+
+X = dataid.loc[:, ['Prom_pas', 'Prom_ac', 'Prom_comp1', 'Prom_comp2']]
+X2 = dataid.loc[:, dataid.columns != 'fuga']
+y = dataid.loc[:, dataid.columns == 'fuga']
+Y = y.astype(np.float)
+
+
+# In[1084]:
+
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = .3, random_state=25)
+
+
+# In[1085]:
+
+
+LogReg = LogisticRegression()
+LogReg.fit(X_train, y_train)
+
+
+# In[1086]:
+
+
+y_pred = LogReg.predict(X_test)
+
+
+# In[1087]:
+
+
+from sklearn.metrics import confusion_matrix
+confusion_matrix = confusion_matrix(y_test, y_pred)
+confusion_matrix
+
+
+# In[1090]:
+
+
+import statsmodels.api as sm
+logit_model=sm.Logit(np.asarray(Y), np.asarray(X))
+result = logit_model.fit()
+print(result.summary2())
+
+
+# In[1089]:
+
+
+np.exp(result.params)
+
